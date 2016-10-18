@@ -6,17 +6,18 @@ import (
 
 // NamespaceAPI TODO:
 type NamespaceAPI interface {
+	Middleware
 	Name() string
 	Namespace(name string) NamespaceAPI
 	Handle(statement string, h Handler)
-	Lookup(statement string) Handler
-	VisitLookup(callback func(statement string, h Handler) bool)
+	Lookup(statement string) Handlers
+	VisitLookup(callback func(statement string, h Handlers) bool)
 	DoAsync(connID int, statement string, args ...Arg) Response
 	Do(connID int, statement string, args ...Arg) (interface{}, error)
 }
 
 type namespace struct {
-	*Middleware // these are the begin and done handlers for all handlers
+	*middleware // these are the begin and done handlers for all handlers
 	fullname    string
 	engine      *Engine
 }
@@ -36,15 +37,16 @@ func (ns *namespace) newNamespace(name string) *namespace {
 	}
 
 	// copy begin and done parent handlers
-	middleware := &Middleware{}
-	if ns.Middleware != nil {
-		middleware.begin = ns.Middleware.begin
-		middleware.done = ns.Middleware.done
+	midl := &middleware{}
+	if ns.middleware != nil {
+		midl.begin = ns.middleware.begin
+		midl.done = ns.middleware.done
 	}
+
 	return &namespace{
 		engine:     ns.engine,
 		fullname:   name,
-		Middleware: middleware,
+		middleware: midl,
 	}
 }
 
@@ -60,19 +62,20 @@ func (ns *namespace) Handle(statement string, h Handler) {
 	}
 
 	// build the main handler
-	handler := buildHandler(ns.Middleware.begin, h, ns.Middleware.done)
-	ns.engine.handlers.add(ns.fullname+sep+statement, handler)
+	handlers := append(ns.middleware.begin, h)
+	handlers = append(handlers, ns.middleware.done...)
+	ns.engine.handlers.add(ns.fullname+sep+statement, handlers)
 }
 
-// Lookup returns the handler with this statement on this namespace
-func (ns *namespace) Lookup(statement string) Handler {
+// Lookup returns the handlers with this statement on this namespace
+func (ns *namespace) Lookup(statement string) Handlers {
 	statement = ns.fullname + sep + statement
 	return ns.engine.handlers.find(statement)
 }
 
 // VisitLookup receives a callback function type for tree traversal.
 // if the callback function returns false then iteration is terminated
-func (ns *namespace) VisitLookup(callback func(statement string, h Handler) bool) {
+func (ns *namespace) VisitLookup(callback func(statement string, h Handlers) bool) {
 	ns.engine.handlers.forEach(callback)
 }
 

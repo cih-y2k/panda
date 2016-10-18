@@ -97,8 +97,10 @@ func (s *Client) Conn() Conn {
 }
 
 // Exec executes a LOCAL handler registered by this client
-func (s *Client) Exec(statement string, args ...Arg) (interface{}, error) {
-	return s.engine.handlers.exec(s.conn, statement, args...)
+func (s *Client) Exec(statement string, args Args) (interface{}, error) {
+	req := s.conn.acquireRequest(statement, args)
+	defer s.conn.releaseRequest(req)
+	return s.engine.handlers.exec(req)
 }
 
 // Close terminates the underline connection (net.Conn)

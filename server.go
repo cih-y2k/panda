@@ -47,11 +47,11 @@ func (s *Server) Serve(ln net.Listener) error {
 	defer s.ln.Close()
 
 	// prepare built'n ack response server-only handler
-	s.Handle("panda_ack", func(c Conn, args ...Arg) (interface{}, error) {
+	s.Handle("panda_ack", func(req *Request) {
 		// the ack will return the connection id which will be setted on the client side in order to be synchronized with the server's
 		// this id is not changed
 		// after this method the client can be served(this is done on client.go)
-		return int(c.ID()), nil
+		req.Result(int(req.Conn().ID()))
 	})
 
 	for {
@@ -115,8 +115,13 @@ func (s *Server) GetConn(id CID) Conn {
 }
 
 // Exec executes a LOCAL handler registered by this server
-func (s *Server) Exec(conn Conn, statement string, args ...Arg) (interface{}, error) {
-	return s.engine.handlers.exec(conn, statement, args...)
+func (s *Server) Exec(con Conn, statement string, args Args) (interface{}, error) {
+	if c, ok := con.(*conn); ok {
+		req := c.acquireRequest(statement, args)
+		defer c.releaseRequest(req)
+		return s.engine.handlers.exec(req)
+	}
+	return nil, errHandlerNotFound.Format(statement)
 }
 
 // Close terminates the server

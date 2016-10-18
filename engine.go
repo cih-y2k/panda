@@ -83,10 +83,22 @@ func NewEngine(setters ...OptionSetter) *Engine {
 	e.ns = &namespace{
 		fullname:   "",
 		engine:     e,
-		Middleware: &Middleware{},
+		middleware: &middleware{},
 	}
 
-	e.cpool.New = func() interface{} { return &conn{engine: e, mu: &sync.RWMutex{}, pending: make(map[string]Response)} }
+	e.cpool.New = func() interface{} {
+		c := &conn{
+			engine:  e,
+			mu:      &sync.RWMutex{},
+			pending: make(map[string]Response),
+		}
+
+		c.reqPool.New = func() interface{} {
+			return &Request{From: c.ID(), conn: c}
+		}
+
+		return c
+	}
 
 	e.Set(setters...)
 	return e
@@ -127,8 +139,9 @@ func (e *Engine) acquireConn(underline net.Conn) *conn {
 
 	c.id = newConnID()
 	c.incomingRes = make(Response, e.opt.buffer)
-	c.incomingReq = make(Request, e.opt.buffer)
+	c.incomingReq = make(chan Request, e.opt.buffer)
 	c.isClosed = false
+
 	e.mu.Lock()
 	e.connections = append(e.connections, c)
 	e.mu.Unlock()

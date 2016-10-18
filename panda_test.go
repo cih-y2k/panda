@@ -76,9 +76,8 @@ func BenchmarkHandleDo(b *testing.B) {
 	srvEngine := panda.NewEngine(panda.OptionBuffer(uint64(b.N / 3)))
 	srv := panda.NewServer(srvEngine)
 
-	srv.Handle("hello", func(panda.Conn, ...panda.Arg) (interface{}, error) {
-		//println("do 1")
-		return "Hello", nil
+	srv.Handle("hello", func(req *panda.Request) {
+		req.Result("Hello")
 	})
 
 	clientEngine := panda.NewEngine(panda.OptionBuffer(uint64(b.N / 3)))
@@ -92,7 +91,7 @@ func BenchmarkHandleDo(b *testing.B) {
 			panic(err)
 		}
 	}()
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 	err := client.Dial("tcp4", "127.0.0.1:128")
 	if err != nil {
 		b.Fatal(err)

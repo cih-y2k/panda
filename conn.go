@@ -21,21 +21,6 @@ type Conn interface {
 }
 
 type (
-	// ack struct {
-	// 	timeout time.Duration
-	// 	ok      chan bool
-	// }
-	// request from receiver to the sender, and waits for answer, a Result
-	// one client can send multiple different requests 'server' aka Result sender
-	request struct {
-		From      CID    // connection id,
-		Statement string // the call statement
-		Args      []Arg  // the statement's method's arguments, if any
-		// the unique request's id which waits for a Result with the same RequestID, may empty if not waiting for Result.
-		// Channel is just a non-struct methodology for request-Result-reqsponse-request communication,
-		// its id made by client before sent to the server, the same id is used for the server's Result
-		ID string
-	}
 
 	// Result , from sender to receiver
 	Result struct {
@@ -56,8 +41,6 @@ type (
 
 	// Response the Result channel binds to request
 	Response chan Result
-	// Request chan of request
-	Request chan request
 )
 
 // Decode writes the 'Result', which should be a map[string]interface{} if receiver expected a custom type struct,
@@ -90,11 +73,12 @@ type conn struct {
 	// client
 	incomingRes Response
 	// server
-	incomingReq Request
+	incomingReq chan Request
 	// client
 	pending map[string]Response
 	mu      *sync.RWMutex
 
+	reqPool  sync.Pool
 	isClosed bool
 }
 
@@ -108,6 +92,37 @@ func (c *conn) ID() CID {
 // setID used only by client to set its connection's ID which is coming from the server with the ack request and Result message type
 func (c *conn) setID(id int) {
 	c.id = CID(id)
+}
+
+// acquireRequest used both on client and server
+// when act like client sending to the server called on sendRequest and released very soon
+// when act like server is created by the Request, called on handleRequest
+// general rule: when we see Request without a pointer receiver then it's payload, sent from client to server, otherwise it's the request 'context
+func (c *conn) acquireRequest(statement string, args Args) *Request {
+	req := c.reqPool.Get().(*Request)
+	if req.ID == "" { // if from client to server, then generate id, otherwise
+		req.ID = strconv.Itoa(int(c.ID())) + "_" + RandomString(6)
+	}
+
+	req.Statement = statement
+	req.Args = args
+	// fields From and conn are not changing*
+	return req
+}
+
+// releaseRequest used both on client and server
+// when conn acts like client sending to the server called on sendRequest and released very soon
+// when conn acts like server is created by the Request, called on handleRequest
+// general rule: when we see Request without a pointer receiver then it's payload, sent from client to server, otherwise it's the request 'context
+func (c *conn) releaseRequest(req *Request) {
+	req.ID = ""
+	req.Args = req.Args[0:0]
+	req.Statement = ""
+	req.values.Reset()
+	req.handlers = nil
+	req.errMessage = ""
+	req.pos = 0
+	c.reqPool.Put(req)
 }
 
 var (
@@ -157,7 +172,7 @@ func (c *conn) reader() {
 				// act like server
 				// DEBUG: println("act like server sending a Result channel")
 				// is incoming request waits for Result
-				var req request
+				var req Request
 				err := c.engine.opt.codec.Deserialize(data, &req)
 				if err != nil {
 					return
@@ -223,35 +238,34 @@ func (c *conn) handle() {
 	}
 }
 
-func (c *conn) sendRequestAsync(statement string, args []Arg, resCh Response) {
+func (c *conn) sendRequestAsync(statement string, args Args, resCh Response) {
 	if c == nil || c.isClosed {
 		resCh <- invalidResponse(c)
 		return
 	}
 
+	req := c.acquireRequest(statement, args)
+	defer c.releaseRequest(req)
+
 	// before contine,  check if it's a local handler
 	if h := c.engine.handlers.find(statement); h != nil {
-		res, err := h(c, args...)
+		req.handlers = h
+		req.Serve()
+
 		resp := Result{
 			RequestID: "",
-			Data:      res,
-		}
-		if err != nil {
-			resp.Error = err.Error()
+			Data:      req.result,
+			Error:     req.errMessage,
 		}
 		resCh <- resp
 
 		return
 	}
-
-	from := c.ID()
-	id := strconv.Itoa(int(c.ID())) + "_" + RandomString(6)
-	req := request{Statement: statement, Args: args, From: from, ID: id}
-
+	// otherwise send the request payload to the server
 	data, err := c.engine.opt.codec.Serialize(req)
 
 	if err != nil || c.pending == nil {
-		resCh <- canceledResponse(id)
+		resCh <- canceledResponse(req.ID)
 	}
 
 	// add the pending here, after go 1.6 we should do with write and read lock here...(;)
@@ -260,23 +274,26 @@ func (c *conn) sendRequestAsync(statement string, args []Arg, resCh Response) {
 	c.pending[req.ID] = resCh
 
 	c.mu.Unlock()
+	//c.engine.logf("Sending request: %#v", req)
 
 	c.Write(append(requestPrefixW, data...))
 }
 
 // HandleRequest ...TODO:
-func (c *conn) handleRequest(req request) {
-	res, err := c.engine.handlers.exec(c, req.Statement, req.Args...)
+func (c *conn) handleRequest(payload Request) {
+	req := c.acquireRequest(payload.Statement, payload.Args)
+	req.ID = payload.ID // send the correct request id
+	defer c.releaseRequest(req)
+
+	// we don't care if found or not, if an error must be sent to the client
+	handlers := c.engine.handlers.find(req.Statement)
+	req.handlers = handlers
+	req.Serve()
+	resp := Result{RequestID: req.ID, Data: req.result, Error: req.errMessage}
+
 	//println("conn.go:224 AFTER execute handler with statement: " + req.Statement + " and requestID: " + req.ID)
 
-	resp := Result{RequestID: req.ID, Data: res}
-
-	//  we have error by handler set error to this
-	if err != nil {
-		resp.Error = err.Error()
-	}
-
-	// first check for serialization errors
+	// first check for serialization errors, if and only here the error is not going back to the client for security reasons, but the server is notified
 	data, serr := c.engine.opt.codec.Serialize(resp)
 	if serr != nil {
 		c.engine.logf("Serialization failed for %#v on Connection with ID: %d, on Statement: %s", resp, c.ID(), req.Statement)
