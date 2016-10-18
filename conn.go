@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"net"
+	//	"reflect"
 	"strconv"
 	"sync"
 )
@@ -279,6 +280,7 @@ func (c *conn) handleRequest(req request) {
 	data, serr := c.engine.opt.codec.Serialize(resp)
 	if serr != nil {
 		c.engine.logf("Serialization failed for %#v on Connection with ID: %d, on Statement: %s", resp, c.ID(), req.Statement)
+		return
 	}
 	c.Write(append(responsePrefixW, data...))
 }

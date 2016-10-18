@@ -105,9 +105,12 @@ func BenchmarkHandleDo(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		//	go func() {
-		_, err := client.Do("hello")
+		res, err := client.Do("hello")
 		if err != nil {
 			b.Fatal(err)
+		}
+		if res.(string) != "Hello" {
+			b.Fatal("Expecting 'Hello' but got %#v", res)
 		}
 		//	wg.Done()
 		//	}()

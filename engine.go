@@ -128,7 +128,7 @@ func (e *Engine) acquireConn(underline net.Conn) *conn {
 	c.id = newConnID()
 	c.incomingRes = make(Response, e.opt.buffer)
 	c.incomingReq = make(Request, e.opt.buffer)
-
+	c.isClosed = false
 	e.mu.Lock()
 	e.connections = append(e.connections, c)
 	e.mu.Unlock()

@@ -75,6 +75,7 @@ func (s *Client) ack(netConn net.Conn) error {
 
 	if err != nil {
 		s.engine.logf("Error on panda ack when receiving the connection's ID, error: %s", err)
+
 		return err
 	}
 	// some decoders/used for deserialization see the int as float64(standar json), some other like godec package see int as uint64, so :
@@ -82,7 +83,8 @@ func (s *Client) ack(netConn net.Conn) error {
 	// sync the id from the server side
 	id, err := DecodeInt(res)
 	if err != nil {
-		panic(err)
+		s.engine.logf("Error when decoding int connection id: " + err.Error())
+		return err
 	}
 
 	s.conn.setID(id)

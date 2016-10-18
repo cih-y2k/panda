@@ -51,7 +51,7 @@ func (s *Server) Serve(ln net.Listener) error {
 		// the ack will return the connection id which will be setted on the client side in order to be synchronized with the server's
 		// this id is not changed
 		// after this method the client can be served(this is done on client.go)
-		return c.ID(), nil
+		return int(c.ID()), nil
 	})
 
 	for {
