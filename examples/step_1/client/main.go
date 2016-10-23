@@ -2,13 +2,13 @@ package main
 
 import (
 	"github.com/greekdev/panda"
-	"github.com/greekdev/panda/examples/step_1/shared"
+	"github.com/greekdev/panda/examples/shared"
 	"log"
 	"os"
 )
 
 func main() {
-	logger := log.New(os.Stdout, "CLIENT", log.LstdFlags)
+	logger := log.New(os.Stdout, "CLIENT ", log.LstdFlags)
 	engine := panda.NewEngine(panda.OptionLogger(logger))
 
 	client := panda.NewClient(engine)

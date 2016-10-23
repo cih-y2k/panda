@@ -5,7 +5,9 @@ import (
 	"github.com/greekdev/panda"
 	"net/http"
 	"net/http/httptest"
-	//"sync"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -72,54 +74,128 @@ func BenchmarkSimpleOnlyHTTPRaw(b *testing.B) {
 	b.ReportAllocs()
 }*/
 
-func BenchmarkHandleDo(b *testing.B) {
-	srvEngine := panda.NewEngine(panda.OptionBuffer(uint64(b.N / 3)))
+func BenchmarkManyClients(b *testing.B) {
+	clients := 500 // we have a lock somewhere, because if clients are more than 200 we have problem, tried with -benchtime also...
+	// lol if 200 clients then does BenchmarkManyClients-8          1000000000
+	// if 500 then 50... wtf something is wrong here
+	doActionsPerClient := 15
+	srvEngine := panda.NewEngine() //panda.OptionBuffer(clients)) //panda.OptionBuffer(uint64(b.N / 3)))
 	srv := panda.NewServer(srvEngine)
 
 	srv.Handle("hello", func(req *panda.Request) {
 		req.Result("Hello")
 	})
 
-	clientEngine := panda.NewEngine(panda.OptionBuffer(uint64(b.N / 3)))
-	client := panda.NewClient(clientEngine)
-	defer func() {
-		client.Close()
-		srv.Close()
-	}()
+	// start the server
 	go func() {
-		if err := srv.ListenAndServe("tcp4", "127.0.0.1:128"); err != nil {
+		if err := srv.ListenAndServe("tcp4", "127.0.0.1:8085"); err != nil {
 			panic(err)
 		}
 	}()
-	time.Sleep(50 * time.Millisecond)
-	err := client.Dial("tcp4", "127.0.0.1:128")
+
+	time.Sleep(50 * time.Millisecond) // wait for the server
+
+	//	var start, end sync.WaitGroup
+	//	start.Add(1)
+	var end sync.WaitGroup
+	end.Add(clients * doActionsPerClient)
+
+	b.ResetTimer()
+	for i := 0; i < clients; i++ {
+		go func() {
+
+			//time.Sleep(200 * time.Millisecond) // give some time to the local
+			client := panda.NewClient(panda.NewEngine()) //panda.OptionBuffer(doActionsPerClient)))
+			if err := client.Dial("tcp4", "127.0.0.1:8085"); err != nil {
+				b.Fatalf("Client error: %s . Op :%d", err, i)
+			}
+			go func(client *panda.Client) {
+				for i := 0; i < doActionsPerClient; i++ {
+
+					//	start.Wait()                   // wait for the start.Done to start the timer
+					res, err := client.Do("hello") // .DoAsync also but we are testing Do mostly.
+					if err != nil {
+						b.Fatal(err)
+					}
+					if res.(string) != "Hello" {
+						b.Fatalf("Expecting Hello but got %#v: ", res)
+					}
+					end.Done()
+
+				}
+			}(client)
+		}()
+
+	}
+
+	//	b.StartTimer()
+	//start.Done()
+	end.Wait()
+	srv.Close()
+	time.Sleep(10 * time.Millisecond) // wait to close
+	b.ReportAllocs()
+
+	//b.Logf("Done %d Operations. Clients: %d, Per Client Op: %d\n", clients*doActionsPerClient, clients, doActionsPerClient)
+
+}
+
+func BenchmarkHandleDo(b *testing.B) {
+	srvEngine := panda.NewEngine() //panda.OptionBuffer(b.N))
+	srv := panda.NewServer(srvEngine)
+
+	srv.Handle("hello", func(req *panda.Request) {
+		name := req.Args.String(0)
+		req.Result("Hello " + name)
+	})
+
+	clientEngine := panda.NewEngine() //panda.OptionBuffer(100))
+	client := panda.NewClient(clientEngine)
+
+	go func() {
+		if err := srv.ListenAndServe("tcp4", "127.0.0.1:130"); err != nil {
+			panic(err)
+		}
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	var run uint64
+	err := client.Dial("tcp4", "127.0.0.1:130")
 	if err != nil {
 		b.Fatal(err)
 	}
 
-	//	wg := &sync.WaitGroup{}
-	//wg.Add(b.N)
-	//fmt.Printf("\nExecuting %d Operations", b.N)
-	b.ResetTimer()
+	actions := 20
 
-	for i := 0; i < b.N; i++ {
-		//	go func() {
-		res, err := client.Do("hello")
-		if err != nil {
-			b.Fatal(err)
-		}
-		if res.(string) != "Hello" {
-			b.Fatal("Expecting 'Hello' but got %#v", res)
-		}
-		//	wg.Done()
-		//	}()
+	b.ResetTimer()
+	var wg sync.WaitGroup
+	wg.Add(actions)
+	for i := 0; i < actions; i++ {
+		time.Sleep(50 * time.Millisecond)
+		go func(i int) {
+
+			name := "kataras" + strconv.Itoa(i)
+			res, err := client.Do("hello", name)
+			if err != nil {
+				panic(err)
+			}
+			if res.(string) != "Hello "+name {
+				b.Fatalf("wrong message, expected %s but we got: %s", name, res.(string))
+			}
+			//println(res.(string))
+			atomic.AddUint64(&run, 1)
+			wg.Done()
+		}(i)
 
 	}
-
-	//	wg.Wait()
-
+	wg.Wait()
 	b.StopTimer()
+
 	b.ReportAllocs()
+
+	client.Close()
+	srv.Close()
+	time.Sleep(100 * time.Millisecond)
+	//fmt.Printf("Run: %d\n", atomic.LoadUint64(&run))
 
 }
 

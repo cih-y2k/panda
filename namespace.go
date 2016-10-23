@@ -12,8 +12,8 @@ type NamespaceAPI interface {
 	Handle(statement string, h Handler)
 	Lookup(statement string) Handlers
 	VisitLookup(callback func(statement string, h Handlers) bool)
-	DoAsync(connID int, statement string, args ...Arg) Response
-	Do(connID int, statement string, args ...Arg) (interface{}, error)
+	DoAsync(c *Conn, statement string, args ...Arg) Response
+	Do(c *Conn, statement string, args ...Arg) (interface{}, error)
 }
 
 type namespace struct {
@@ -80,30 +80,18 @@ func (ns *namespace) VisitLookup(callback func(statement string, h Handlers) boo
 }
 
 // DoAsync TODO: make the channel exported*
-func (ns *namespace) doAsync(c *conn, statement string, args ...Arg) Response {
+func (ns *namespace) DoAsync(c *Conn, statement string, args ...Arg) Response {
 	statement = ns.fullname + sep + statement // if root then it's simply /statement
-	// send to the 'server'
-	resCh := make(Response, 1)
-	c.sendRequestAsync(statement, args, resCh)
-	return resCh
-}
-
-// DoAsync TODO: make the channel exported*
-func (ns *namespace) DoAsync(connID int, statement string, args ...Arg) Response {
-	return ns.doAsync(ns.engine.getConn(CID(connID)), statement, args...)
+	return c.sendRequest(statement, args)
 }
 
 // Do TODO:
-func (ns *namespace) do(c *conn, statement string, args ...Arg) (interface{}, error) {
-	resp := <-ns.doAsync(c, statement, args...)
+func (ns *namespace) Do(c *Conn, statement string, args ...Arg) (interface{}, error) {
+	resp := <-ns.DoAsync(c, statement, args...)
 	if resp.Error != "" {
 		return nil, fmt.Errorf("%s", resp.Error)
 	}
 	return resp.Data, nil
-}
-
-func (ns *namespace) Do(connID int, statement string, args ...Arg) (interface{}, error) {
-	return ns.do(ns.engine.getConn(CID(connID)), statement, args...)
 }
 
 // client side just .Call/Do(statement, args...)
@@ -113,7 +101,7 @@ func (ns *namespace) Do(connID int, statement string, args ...Arg) (interface{},
 // ClientNamespace TODO:
 type ClientNamespace struct {
 	*namespace
-	conn *conn // we need only Conn but if we use it here it will be like we are setting conn here and not to the client itself...
+	conn *Conn // we need only Conn but if we use it here it will be like we are setting conn here and not to the client itself...
 }
 
 // Namespace TODO:
@@ -126,10 +114,10 @@ func (ns *ClientNamespace) Namespace(name string) *ClientNamespace {
 
 // DoAsync TODO: make the channel exported*
 func (ns *ClientNamespace) DoAsync(statement string, args ...Arg) Response {
-	return ns.namespace.doAsync(ns.conn, statement, args...)
+	return ns.namespace.DoAsync(ns.conn, statement, args...)
 }
 
 // Do TODO:
 func (ns *ClientNamespace) Do(statement string, args ...Arg) (interface{}, error) {
-	return ns.namespace.do(ns.conn, statement, args...)
+	return ns.namespace.Do(ns.conn, statement, args...)
 }

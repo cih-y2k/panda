@@ -92,7 +92,7 @@ func (s *Client) ack(netConn net.Conn) error {
 }
 
 // Conn returns the client's connection
-func (s *Client) Conn() Conn {
+func (s *Client) Conn() *Conn {
 	return s.conn
 }
 

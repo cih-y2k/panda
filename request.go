@@ -74,7 +74,7 @@ var (
 // one client can send multiple different requests 'server' aka Result sender
 // lowercase used by the server handler, uppercase used as payload too
 type Request struct {
-	conn       *conn
+	Conn       *Conn
 	handlers   []Handler
 	pos        int
 	errMessage string
@@ -89,7 +89,8 @@ type Request struct {
 	// the unique request's id which waits for a Result with the same RequestID, may empty if not waiting for Result.
 	// Channel is just a non-struct methodology for request-Result-reqsponse-request communication,
 	// its id made by client before sent to the server, the same id is used for the server's Result
-	ID string
+	ID       string
+	response Response
 }
 
 // Serve calls the middleware
@@ -120,6 +121,14 @@ func (req *Request) ForceNext() {
 // Cancel just sets the .pos to the MaxHandlers in order to  not move to the next middlewares(if any)
 func (req *Request) Cancel() {
 	req.pos = MaxHandlers
+}
+
+// CancelWithError cancels the next handler's execution and saves the error which will should be sent to the client
+func (req *Request) CancelWithError(s string) {
+	if s != "" {
+		req.Error(s)
+		req.Cancel()
+	}
 }
 
 // Error sends an error to the client and stops the execution of the next handlers
@@ -262,9 +271,4 @@ func (req *Request) GetString(key string) string {
 
 	}
 	return ""
-}
-
-// Conn returns the client connection
-func (req *Request) Conn() Conn {
-	return req.conn
 }

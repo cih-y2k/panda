@@ -138,22 +138,6 @@ func (t *middleware) Done(h ...Handler) {
 	t.done = append(t.done, h...)
 }
 
-// Canceled TODO:
-type Canceled struct{}
-
-func (c Canceled) Error() string {
-	return "Canceled"
-}
-
-// Invalid TOOD:
-type Invalid struct {
-	conn *conn
-}
-
-func (i Invalid) Error() string {
-	return fmt.Sprintf("Invalid response, connection: '%#v' was not found", i.conn) // conn should be nil but for any case print it
-}
-
 type handlersMux struct {
 	tree art.Tree
 }

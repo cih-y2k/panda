@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/greekdev/panda"
-	"github.com/greekdev/panda/examples/step_1/shared"
+	"github.com/greekdev/panda/examples/shared"
 	"log"
 	"os"
 )

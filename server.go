@@ -14,8 +14,9 @@ func init() {
 // Server TODO:
 type Server struct {
 	NamespaceAPI
-	engine *Engine
-	ln     net.Listener
+	engine                *Engine
+	ln                    net.Listener
+	connectedEvtListeners []func(*Conn) ///TODO: na kanw kai ta onClose enoeite kai diagrafw ta connections sto engine dn xreiazonte...
 	///TODO: timeouts, max connections and so on...
 }
 
@@ -37,6 +38,26 @@ func Serve(ln net.Listener) error {
 	return Default.Serve(ln)
 }
 
+func (s *Server) serve(ln net.Listener) error {
+	s.ln = ln
+
+	for {
+		netConn, err := s.ln.Accept()
+		if err != nil {
+			s.engine.logf("Connection error: %s\n", err)
+			continue
+		}
+
+		go func() {
+			c := s.engine.acquireConn(netConn)
+			go s.emitConnected(c)
+			/// TODO: edw na kanw usage KAPWS to emitConnected gia na borw na elenxw to connected an kanw .serve i an kanw ena http serve..
+			c.serve() // serve blocks until error
+			s.engine.releaseConn(c)
+		}()
+	}
+}
+
 // Serve serves the incoming panda connections,
 // it starts a new goroutine for each of the panda connections.
 // Receives any net.Listen to listen on
@@ -51,7 +72,7 @@ func (s *Server) Serve(ln net.Listener) error {
 		// the ack will return the connection id which will be setted on the client side in order to be synchronized with the server's
 		// this id is not changed
 		// after this method the client can be served(this is done on client.go)
-		req.Result(int(req.Conn().ID()))
+		req.Result(int(req.Conn.ID()))
 	})
 
 	for {
@@ -63,9 +84,27 @@ func (s *Server) Serve(ln net.Listener) error {
 
 		go func() {
 			c := s.engine.acquireConn(netConn)
-			c.serve() // serve blocks until error
+			go s.emitConnected(c)
+			c.serve() // serve blocks until connection stop reading
 			s.engine.releaseConn(c)
 		}()
+	}
+}
+
+// OnConnection registers an event callback and raise (them) when a new connection has been connected to the server
+// it has no many usages because Conn is limited for your own safety, but you can do some useful staff, like
+// adding this connection to a map or slice and check if a connection asking for something passed its custom verification
+// although you can do that with a middleware, it's useful to have an event like this for any case
+//
+// Note: Register OnConnection event callbacks before you started the server, otherwise you may experience some issues
+func (s *Server) OnConnection(cb func(*Conn)) {
+	s.connectedEvtListeners = append(s.connectedEvtListeners, cb)
+}
+
+// emitConnected runs in each own goroutine before serve in order to be ready to `.Do` to the client for example
+func (s *Server) emitConnected(c *Conn) {
+	for _, l := range s.connectedEvtListeners {
+		l(c)
 	}
 }
 
@@ -108,20 +147,11 @@ func (s *Server) ListenAndServe(network string, laddr string) error {
 	return s.Serve(ln)
 }
 
-// GetConn returns a connection by id
-// the returned Conn cannot be changed
-func (s *Server) GetConn(id CID) Conn {
-	return s.engine.getConn(id)
-}
-
 // Exec executes a LOCAL handler registered by this server
-func (s *Server) Exec(con Conn, statement string, args Args) (interface{}, error) {
-	if c, ok := con.(*conn); ok {
-		req := c.acquireRequest(statement, args)
-		defer c.releaseRequest(req)
-		return s.engine.handlers.exec(req)
-	}
-	return nil, errHandlerNotFound.Format(statement)
+func (s *Server) Exec(c *Conn, statement string, args Args) (interface{}, error) {
+	req := c.acquireRequest(statement, args)
+	defer c.releaseRequest(req)
+	return s.engine.handlers.exec(req)
 }
 
 // Close terminates the server

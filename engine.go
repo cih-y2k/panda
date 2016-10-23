@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 )
 
 type (
@@ -11,7 +12,7 @@ type (
 	Options struct {
 		logger *log.Logger
 		codec  Codec
-		buffer uint64
+		buffer int
 	}
 	// OptionSetter sets a configuration field to the engine's Options
 	// used to help developers to write less and configure only what they really want and nothing else
@@ -55,7 +56,7 @@ func OptionCodec(val Codec) OptionSet {
 }
 
 // OptionBuffer TODO:
-func OptionBuffer(val uint64) OptionSet {
+func OptionBuffer(val int) OptionSet {
 	return func(o *Options) {
 		o.buffer = val
 	}
@@ -65,12 +66,10 @@ func OptionBuffer(val uint64) OptionSet {
 // contains the connections, the handlers and any useful information to serve connection(s)
 // both client connection or serve server's side incoming clients/connections
 type Engine struct {
-	opt         *Options
-	handlers    *handlersMux
-	ns          *namespace
-	cpool       sync.Pool
-	connections []*conn
-	mu          sync.Mutex
+	opt      *Options
+	handlers *handlersMux
+	ns       *namespace
+	cpool    sync.Pool
 }
 
 // NewEngine returns a new engine for use
@@ -87,14 +86,13 @@ func NewEngine(setters ...OptionSetter) *Engine {
 	}
 
 	e.cpool.New = func() interface{} {
-		c := &conn{
+		c := &Conn{
 			engine:  e,
-			mu:      &sync.RWMutex{},
-			pending: make(map[string]Response),
+			pending: make(map[string]Response, 0),
 		}
 
 		c.reqPool.New = func() interface{} {
-			return &Request{From: c.ID(), conn: c}
+			return &Request{Conn: c}
 		}
 
 		return c
@@ -120,75 +118,45 @@ func (e *Engine) logf(format string, v ...interface{}) {
 	}
 }
 
-var connIDCounter struct {
-	sync.Mutex
-	value CID
+var cidCounter struct {
+	value uint64
 }
 
-func newConnID() CID {
-	connIDCounter.Lock()
-	connIDCounter.value++
-	id := connIDCounter.value
-	connIDCounter.Unlock()
-	return id
+func newCID() CID {
+	atomic.AddUint64(&cidCounter.value, 1)
+	return CID(atomic.LoadUint64(&cidCounter.value)) // ?
+	//connIDCounter.value++
+	//return CID(connIDCounter.value)
 }
 
-func (e *Engine) acquireConn(underline net.Conn) *conn {
-	c := e.cpool.Get().(*conn)
+func (e *Engine) acquireConn(underline net.Conn) *Conn {
+	c := e.cpool.Get().(*Conn)
 	c.Conn = underline
 
-	c.id = newConnID()
+	c.id = newCID()
+	c.outcomingReq = make(request, e.opt.buffer)
 	c.incomingRes = make(Response, e.opt.buffer)
-	c.incomingReq = make(chan Request, e.opt.buffer)
+	c.incomingReq = make(request, e.opt.buffer)
+	c.stopCh = make(chan struct{}, 1)
 	c.isClosed = false
 
-	e.mu.Lock()
-	e.connections = append(e.connections, c)
-	e.mu.Unlock()
 	return c
 }
 
-func (e *Engine) releaseConn(c *conn) (err error) {
+func (e *Engine) releaseConn(c *Conn) (err error) {
 	// close the connection here
-	// if manually closed then it should be reach to the releaseConn which will try to close it again and provides an error but we don't care about it atm.
-	if !c.Closed() {
+	// if manually closed then it should be reach to the releaseConn which will try to close it again so introduce the isClosed
+	if !c.isClosed {
 		err = c.Close()
 	}
 
 	close(c.incomingReq)
 	close(c.incomingRes)
+
 	c.CancelAllPending()
-
-	idx := 0
-	e.mu.Lock()
-	defer e.mu.Unlock()
-
-	for idx = range e.connections {
-		if c.ID() == e.connections[idx].ID() {
-			break
-		}
-	}
-
-	if idx > -1 {
-		e.connections[idx] = e.connections[len(e.connections)-1]
-		e.connections = e.connections[:len(e.connections)-1]
-	}
 
 	e.cpool.Put(c)
 	return
-}
-
-// GetConn returns a connection by id
-// the returned Conn cannot be changed
-func (e *Engine) getConn(id CID) *conn {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	for _, c := range e.connections {
-		if c.ID() == id {
-			return c
-		}
-	}
-	return nil
 }
 
 ///TODO: send an ack message before any other message to the client, which will be setting it's internal connection's ID too
