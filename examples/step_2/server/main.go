@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/greekdev/panda"
+	"github.com/geekypanda/panda"
 	"log"
 )
 

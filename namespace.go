@@ -9,7 +9,7 @@ type NamespaceAPI interface {
 	Middleware
 	Name() string
 	Namespace(name string) NamespaceAPI
-	Handle(statement string, h Handler)
+	Handle(statement string, h ...Handler)
 	Lookup(statement string) Handlers
 	VisitLookup(callback func(statement string, h Handlers) bool)
 	DoAsync(c *Conn, statement string, args ...Arg) Response
@@ -56,13 +56,13 @@ func (ns *namespace) Namespace(name string) NamespaceAPI {
 }
 
 // Handle TODO:
-func (ns *namespace) Handle(statement string, h Handler) {
-	if statement == "" || h == nil {
+func (ns *namespace) Handle(statement string, h ...Handler) {
+	if statement == "" || len(h) == 0 {
 		return
 	}
 
 	// build the main handler
-	handlers := append(ns.middleware.begin, h)
+	handlers := append(ns.middleware.begin, h...)
 	handlers = append(handlers, ns.middleware.done...)
 	ns.engine.handlers.add(ns.fullname+sep+statement, handlers)
 }

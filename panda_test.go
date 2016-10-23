@@ -2,7 +2,7 @@ package panda_test
 
 import (
 	//	"fmt"
-	"github.com/greekdev/panda"
+	"github.com/geekypanda/panda"
 	"net/http"
 	"net/http/httptest"
 	"strconv"

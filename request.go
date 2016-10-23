@@ -89,8 +89,7 @@ type Request struct {
 	// the unique request's id which waits for a Result with the same RequestID, may empty if not waiting for Result.
 	// Channel is just a non-struct methodology for request-Result-reqsponse-request communication,
 	// its id made by client before sent to the server, the same id is used for the server's Result
-	ID       string
-	response Response
+	ID string
 }
 
 // Serve calls the middleware
@@ -124,9 +123,9 @@ func (req *Request) Cancel() {
 }
 
 // CancelWithError cancels the next handler's execution and saves the error which will should be sent to the client
-func (req *Request) CancelWithError(s string) {
-	if s != "" {
-		req.Error(s)
+func (req *Request) CancelWithError(format string, a ...interface{}) {
+	if format != "" {
+		req.Error(format, a...)
 		req.Cancel()
 	}
 }

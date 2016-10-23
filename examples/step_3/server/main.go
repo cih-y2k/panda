@@ -22,9 +22,15 @@ func main() {
 	engine := panda.NewEngine(panda.OptionLogger(logger))
 
 	server := panda.NewServer(engine)
-	server.Begin(panda.ArgsLen(0, 1))
 
-	server.Handle("getUser", func(req *panda.Request) {
+	middleware := func(req *panda.Request) {
+		l := len(req.Args)
+		if l != 1 {
+			req.CancelWithError("Expected only one argument but got %d", l)
+		}
+	}
+
+	server.Handle("getUser", middleware, func(req *panda.Request) {
 
 		id := req.Args.Int(0)
 

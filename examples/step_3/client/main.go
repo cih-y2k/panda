@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/geekypanda/panda"
-	"github.com/geekypanda/panda/examples/shared"
 	"log"
 	"os"
 )
@@ -21,18 +20,20 @@ func main() {
 	}
 	// waits until connected
 
-	for i := 0; i <= 50; i++ {
+	// this should be fail
+	result, err := client.Do("getUser", 1, 2)
+	if err != nil {
+		logger.Println("Error on getUser: " + err.Error())
+	} else {
+		logger.Printf("User %#v: ", result)
+	}
 
-		result, err := client.Do("getUser", i)
-		if err != nil {
-			logger.Println("Error on getUser: " + err.Error())
-			continue
-		}
-		// optionally, decode the result from map[string]interface{} to struct User
-		user := &shared.User{}
-		panda.DecodeResult(user, result)
-
-		logger.Println("User firstname: " + user.Firstname)
+	// this should be ok
+	result, err = client.Do("getUser", 1)
+	if err != nil {
+		logger.Println("Error on getUser: " + err.Error())
+	} else {
+		logger.Printf("User %#v: ", result)
 	}
 
 	logger.Println("Closing connection")
