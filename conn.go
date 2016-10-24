@@ -24,9 +24,10 @@ type Conn struct {
 	engine *Engine
 	mu     sync.Mutex
 	// client
-	outcomingReq request
-	incomingRes  Response
-	pending      map[string]Response // request id: responsePayload channel
+	outcomingReq     request
+	incomingRes      Response
+	pending          map[string]Response // request id: responsePayload channel
+	cancelAllPending chan struct{}
 	// server
 	incomingReq request
 
@@ -78,6 +79,7 @@ func (c *Conn) reader() {
 			if err != nil {
 				return
 			}
+
 			c.incomingRes <- resp
 			// DEBUG: println("Sent")
 
@@ -101,9 +103,9 @@ func (c *Conn) reader() {
 
 }
 
-func (c *Conn) sendRequest(statement string, args Args) Response {
+func (c *Conn) sendRequest(statement string, args Args, expectRaw bool) Response {
 	response := make(Response, 1)
-	c.outcomingReq <- requestPayload{Statement: statement, Args: args, ID: RandomString(10), From: c.ID(), response: response}
+	c.outcomingReq <- requestPayload{Statement: statement, Args: args, ID: RandomString(10), From: c.ID(), response: response, SkipSerialization: expectRaw}
 	return response
 }
 
@@ -114,12 +116,20 @@ func (c *Conn) startClient() {
 			{
 				break
 			}
+		case <-c.cancelAllPending:
+			{
+				for id, pending := range c.pending {
+					// clean up any pending message by sending a canceled error Result
+					pending <- canceledResponsePayload(id, "")
+					close(pending)
+					delete(c.pending, id)
+				}
+			}
 		case out, ok := <-c.outcomingReq:
 			{
 				if !ok {
 					return
 				}
-
 				data, err := c.engine.opt.codec.Serialize(out)
 				if err != nil {
 					out.response <- canceledResponsePayload(out.ID, err.Error()) // c.incomingRes should be buffered here, I don't want to change the flow.
@@ -170,7 +180,26 @@ func (c *Conn) startServer() {
 				handlers := c.engine.handlers.find(req.Statement)
 				req.handlers = handlers
 				req.Serve()
-				resp := responsePayload{RequestID: req.ID, Data: req.result, Error: req.errMessage}
+				resp := responsePayload{RequestID: req.ID, Error: req.errMessage}
+				// if b, isBytes := req.result.([]byte); isBytes {
+				// 	resp.Data = b
+				// } else {
+				// 	resp.Result = req.result
+				// }
+				if in.SkipSerialization {
+					if b, isBytes := req.result.([]byte); isBytes {
+						resp.Data = b
+					} else {
+						resultData, serr := c.engine.opt.codec.Serialize(req.result)
+						if serr != nil {
+							c.engine.logf("Serialization failed for %#v on Connection with ID: %d, on Statement: %s", resp, c.ID(), req.Statement)
+							return
+						}
+						resp.Data = resultData
+					}
+				} else {
+					resp.Result = req.result // is decoded as general
+				}
 
 				//println("conn.go:224 AFTER execute handler with statement: " + req.Statement + " and requestID: " + req.ID)
 
@@ -204,18 +233,6 @@ func (c *Conn) releaseRequest(req *Request) {
 	req.errMessage = ""
 	req.pos = 0
 	c.reqPool.Put(req)
-}
-
-// CancelAllPending TODO:
-func (c *Conn) CancelAllPending() {
-	c.mu.Lock()
-	for id, pending := range c.pending {
-		// clean up any pending message by sending a canceled error Result
-		pending <- canceledResponsePayload(id, "")
-		close(pending)
-		delete(c.pending, id)
-	}
-	c.mu.Unlock()
 }
 
 var newLineBytes = []byte("\n")

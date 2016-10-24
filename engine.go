@@ -137,6 +137,7 @@ func (e *Engine) acquireConn(underline net.Conn) *Conn {
 	c.outcomingReq = make(request, e.opt.buffer)
 	c.incomingRes = make(Response, e.opt.buffer)
 	c.incomingReq = make(request, e.opt.buffer)
+	c.cancelAllPending = make(chan struct{}, 1)
 	c.stopCh = make(chan struct{}, 1)
 	c.isClosed = false
 
@@ -152,8 +153,7 @@ func (e *Engine) releaseConn(c *Conn) (err error) {
 
 	close(c.incomingReq)
 	close(c.incomingRes)
-
-	c.CancelAllPending()
+	close(c.cancelAllPending)
 
 	e.cpool.Put(c)
 	return

@@ -12,8 +12,10 @@ type NamespaceAPI interface {
 	Handle(statement string, h ...Handler)
 	Lookup(statement string) Handlers
 	VisitLookup(callback func(statement string, h Handlers) bool)
-	DoAsync(c *Conn, statement string, args ...Arg) Response
+	DoAsync(c *Conn, statement string, raw bool, args ...Arg) Response
 	Do(c *Conn, statement string, args ...Arg) (interface{}, error)
+	// DoRaw use it when you want to manually encode/decode the object or just write to another writer, this is faster method
+	DoRaw(c *Conn, statement string, args ...Arg) ([]byte, error)
 }
 
 type namespace struct {
@@ -80,17 +82,28 @@ func (ns *namespace) VisitLookup(callback func(statement string, h Handlers) boo
 }
 
 // DoAsync TODO: make the channel exported*
-func (ns *namespace) DoAsync(c *Conn, statement string, args ...Arg) Response {
+func (ns *namespace) DoAsync(c *Conn, statement string, raw bool, args ...Arg) Response {
 	statement = ns.fullname + sep + statement // if root then it's simply /statement
-	return c.sendRequest(statement, args)
+	return c.sendRequest(statement, args, raw)
 }
 
 // Do TODO:
 func (ns *namespace) Do(c *Conn, statement string, args ...Arg) (interface{}, error) {
-	resp := <-ns.DoAsync(c, statement, args...)
+	resp := <-ns.DoAsync(c, statement, false, args...)
 	if resp.Error != "" {
 		return nil, fmt.Errorf("%s", resp.Error)
 	}
+
+	return resp.Result, nil
+}
+
+// Do TODO:
+func (ns *namespace) DoRaw(c *Conn, statement string, args ...Arg) ([]byte, error) {
+	resp := <-ns.DoAsync(c, statement, true, args...)
+	if resp.Error != "" {
+		return nil, fmt.Errorf("%s", resp.Error)
+	}
+
 	return resp.Data, nil
 }
 
@@ -113,11 +126,16 @@ func (ns *ClientNamespace) Namespace(name string) *ClientNamespace {
 }
 
 // DoAsync TODO: make the channel exported*
-func (ns *ClientNamespace) DoAsync(statement string, args ...Arg) Response {
-	return ns.namespace.DoAsync(ns.conn, statement, args...)
+func (ns *ClientNamespace) DoAsync(statement string, raw bool, args ...Arg) Response {
+	return ns.namespace.DoAsync(ns.conn, statement, raw, args...)
 }
 
 // Do TODO:
 func (ns *ClientNamespace) Do(statement string, args ...Arg) (interface{}, error) {
 	return ns.namespace.Do(ns.conn, statement, args...)
+}
+
+// DoRaw TODO:
+func (ns *ClientNamespace) DoRaw(statement string, args ...Arg) ([]byte, error) {
+	return ns.namespace.DoRaw(ns.conn, statement, args...)
 }

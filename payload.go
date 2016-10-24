@@ -1,6 +1,9 @@
 package panda
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 var (
 	requestPrefix   = []byte("REQ")
@@ -17,11 +20,12 @@ type (
 		// the unique request's id which waits for a Result with the same RequestID, may empty if not waiting for Result.
 		// Channel is just a non-struct methodology for request-Result-reqsponse-request communication,
 		// its id made by client before sent to the server, the same id is used for the server's Result
-		ID        string
-		From      CID    // connection id,
-		Statement string // the call statement
-		Args      Args   // the statement's method's arguments, if any
-		response  Response
+		ID                string
+		From              CID    // connection id,
+		Statement         string // the call statement
+		Args              Args   // the statement's method's arguments, if any
+		SkipSerialization bool   // if true then serialization is not applied for the response
+		response          Response
 	}
 
 	// server -> client , it's the result of the requestPayload's statement handler
@@ -32,8 +36,10 @@ type (
 		// becaue of that we have a .To function which will convert this , as map to a struct
 		// error if any from the server for this particular request's Result
 		// If it's a struct then it's a map[string]interface{}, json ready-to-use. If it's int then it's float64, all other standar types as they are.
-		Data  interface{}
-		Error string // error type cannot be json-encoded/decoded so it's string but handlers returns error as user expects
+		Data   json.RawMessage // if request's SkipSerialization is true then this is filled and result is nil
+		Result interface{}     // if request's SkipSerialization is false, then this is filled by decoded handler's result
+		Error  string          // error type cannot be json-encoded/decoded so it's string but handlers returns error as user expects
+		//Raw   []byte      `json:"-"` // if requestPayload's SkipSerialization is true, then this interface{} its 100% raw []byte
 	}
 )
 
