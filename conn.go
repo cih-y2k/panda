@@ -96,7 +96,7 @@ func (c *Conn) reader() {
 			// DEBUG: println("Sent")
 
 		} else {
-			// invalid message, discard for now.
+
 		}
 
 	}

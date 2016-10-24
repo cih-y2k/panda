@@ -104,7 +104,7 @@ func (ns *namespace) DoRaw(c *Conn, statement string, args ...Arg) ([]byte, erro
 		return nil, fmt.Errorf("%s", resp.Error)
 	}
 
-	return resp.Data, nil
+	return resp.Data, nil //resp.Data.MarshalJSON()
 }
 
 // client side just .Call/Do(statement, args...)
