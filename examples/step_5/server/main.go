@@ -12,7 +12,7 @@ var (
 )
 
 func init() {
-	for i := 0; i <= 50; i++ {
+	for i := 1; i <= 50; i++ {
 		users[i] = shared.NewTestUser(i)
 	}
 }
@@ -20,8 +20,8 @@ func init() {
 func main() {
 	logger := log.New(os.Stdout, "SERVER ", log.LstdFlags)
 	engine := panda.NewEngine(panda.OptionLogger(logger))
-
 	server := panda.NewServer(engine)
+
 	server.Handle("getUser", func(req *panda.Request) {
 		id := req.Args.Int(0)
 		user, found := users[id]

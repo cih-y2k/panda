@@ -21,7 +21,7 @@ func main() {
 	}
 	// waits until connected
 
-	for i := 0; i <= 50; i++ {
+	for i := 1; i <= 50; i++ {
 
 		result, err := client.Do("getUser", i)
 		if err != nil {

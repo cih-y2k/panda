@@ -105,7 +105,14 @@ func (c *Conn) reader() {
 
 func (c *Conn) sendRequest(statement string, args Args, expectRaw bool) Response {
 	response := make(Response, 1)
-	c.outcomingReq <- requestPayload{Statement: statement, Args: args, ID: RandomString(10), From: c.ID(), response: response, SkipSerialization: expectRaw}
+	c.outcomingReq <- requestPayload{
+		ID:              RandomString(10),
+		From:            c.ID(),
+		Statement:       statement,
+		Args:            args,
+		ExpectRawResult: expectRaw,
+		response:        response,
+	}
 	return response
 }
 
@@ -181,21 +188,17 @@ func (c *Conn) startServer() {
 				req.handlers = handlers
 				req.Serve()
 				resp := responsePayload{RequestID: req.ID, Error: req.errMessage}
-				// if b, isBytes := req.result.([]byte); isBytes {
-				// 	resp.Data = b
-				// } else {
-				// 	resp.Result = req.result
-				// }
-				if in.SkipSerialization {
+
+				if in.ExpectRawResult {
 					if b, isBytes := req.result.([]byte); isBytes {
-						resp.Data = b
+						resp.RawResult = b
 					} else {
 						resultData, serr := c.engine.opt.codec.Serialize(req.result)
 						if serr != nil {
 							c.engine.logf("Serialization failed for %#v on Connection with ID: %d, on Statement: %s", resp, c.ID(), req.Statement)
 							return
 						}
-						resp.Data = resultData
+						resp.RawResult = resultData
 					}
 				} else {
 					resp.Result = req.result // is decoded as general
