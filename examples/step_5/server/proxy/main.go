@@ -12,8 +12,8 @@ func main() {
 	mux.HandleFunc("/user", func(res http.ResponseWriter, req *http.Request) {
 		c := panda.NewClient(panda.NewEngine())
 		c.Connect(remote)
-		id := req.URL.Query().Get("id")
-		data, err := c.DoRaw("getUser", id)
+		//	id := req.URL.Query().Get("id")
+		data, err := c.DoRaw("getUser", panda.ParseQuery(req))
 		if err == nil {
 			res.Header().Set("Content-Type", "application/json; charset=utf-8")
 			res.WriteHeader(200)

@@ -2,6 +2,7 @@ package panda
 
 import (
 	"fmt"
+	"strconv"
 )
 
 // NamespaceAPI TODO:
@@ -12,10 +13,10 @@ type NamespaceAPI interface {
 	Handle(statement string, h ...Handler)
 	Lookup(statement string) Handlers
 	VisitLookup(callback func(statement string, h Handlers) bool)
-	DoAsync(c *Conn, statement string, raw bool, args ...Arg) Response
-	Do(c *Conn, statement string, args ...Arg) (interface{}, error)
+	DoAsync(c *Conn, statement string, raw bool, args ...Args) Response
+	Do(c *Conn, statement string, args ...Args) (interface{}, error)
 	// DoRaw use it when you want to manually encode/decode the object or just write to another writer, this is faster method
-	DoRaw(c *Conn, statement string, args ...Arg) ([]byte, error)
+	DoRaw(c *Conn, statement string, args ...Args) ([]byte, error)
 }
 
 type namespace struct {
@@ -82,13 +83,28 @@ func (ns *namespace) VisitLookup(callback func(statement string, h Handlers) boo
 }
 
 // DoAsync TODO: make the channel exported*
-func (ns *namespace) DoAsync(c *Conn, statement string, raw bool, args ...Arg) Response {
+func (ns *namespace) DoAsync(c *Conn, statement string, raw bool, args ...Args) Response {
 	statement = ns.fullname + sep + statement // if root then it's simply /statement
-	return c.sendRequest(statement, args, raw)
+
+	// ok here we want just map[string]interface{}, the variadic is only for optionallity so:
+	// if len(args) > 1 we should pass the [1:] as key["1"], key["2"], hoping that the first argument set is not containing a name like "1"..
+
+	var arguments Args
+
+	if len(args) > 0 {
+		arguments = args[0]
+	}
+	if len(args) > 1 {
+		for i := 1; i < len(args); i++ {
+			arguments[strconv.Itoa(i)] = args[i]
+		}
+	}
+
+	return c.sendRequest(statement, arguments, raw)
 }
 
 // Do TODO:
-func (ns *namespace) Do(c *Conn, statement string, args ...Arg) (interface{}, error) {
+func (ns *namespace) Do(c *Conn, statement string, args ...Args) (interface{}, error) {
 	resp := <-ns.DoAsync(c, statement, false, args...)
 	if resp.Error != "" {
 		return nil, fmt.Errorf("%s", resp.Error)
@@ -98,7 +114,7 @@ func (ns *namespace) Do(c *Conn, statement string, args ...Arg) (interface{}, er
 }
 
 // Do TODO:
-func (ns *namespace) DoRaw(c *Conn, statement string, args ...Arg) ([]byte, error) {
+func (ns *namespace) DoRaw(c *Conn, statement string, args ...Args) ([]byte, error) {
 	resp := <-ns.DoAsync(c, statement, true, args...)
 	if resp.Error != "" {
 		return nil, fmt.Errorf("%s", resp.Error)
@@ -126,16 +142,16 @@ func (ns *ClientNamespace) Namespace(name string) *ClientNamespace {
 }
 
 // DoAsync TODO: make the channel exported*
-func (ns *ClientNamespace) DoAsync(statement string, raw bool, args ...Arg) Response {
+func (ns *ClientNamespace) DoAsync(statement string, raw bool, args ...Args) Response {
 	return ns.namespace.DoAsync(ns.conn, statement, raw, args...)
 }
 
 // Do TODO:
-func (ns *ClientNamespace) Do(statement string, args ...Arg) (interface{}, error) {
+func (ns *ClientNamespace) Do(statement string, args ...Args) (interface{}, error) {
 	return ns.namespace.Do(ns.conn, statement, args...)
 }
 
 // DoRaw TODO:
-func (ns *ClientNamespace) DoRaw(statement string, args ...Arg) ([]byte, error) {
+func (ns *ClientNamespace) DoRaw(statement string, args ...Args) ([]byte, error) {
 	return ns.namespace.DoRaw(ns.conn, statement, args...)
 }

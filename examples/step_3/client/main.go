@@ -21,7 +21,7 @@ func main() {
 	// waits until connected
 
 	// this should be fail
-	result, err := client.Do("getUser", 1, 2)
+	result, err := client.Do("getUser", panda.Args{"id": 1, "invalidNumberofArgs": 2})
 	if err != nil {
 		logger.Println("Error on getUser: " + err.Error())
 	} else {
@@ -29,7 +29,7 @@ func main() {
 	}
 
 	// this should be ok
-	result, err = client.Do("getUser", 1)
+	result, err = client.Do("getUser", panda.Args{"id": 1})
 	if err != nil {
 		logger.Println("Error on getUser: " + err.Error())
 	} else {

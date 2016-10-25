@@ -6,26 +6,23 @@ import (
 	"github.com/plar/go-adaptive-radix-tree" ///TODO: find a way to fix it
 )
 
-// Arg TODO:
-type Arg interface{}
-
 // Args TOOD:
-type Args []Arg
+type Args map[string]interface{}
 
-// Get returns an argument based on its called position
-func (args Args) Get(idx int) interface{} {
-	for i := range args {
-		if i != idx {
+// Get returns an argument based on its key
+func (args Args) Get(key string) interface{} {
+	for k, v := range args {
+		if key != k {
 			continue
 		}
-		return args[i]
+		return v
 	}
 	return nil
 }
 
-// String returns a typeof string argument based on its called position
-func (args Args) String(idx int) string {
-	if arg := args.Get(idx); arg != nil {
+// String returns a typeof string argument based on its key
+func (args Args) String(key string) string {
+	if arg := args.Get(key); arg != nil {
 		if s, ok := arg.(string); ok {
 			return s
 		}
@@ -33,9 +30,9 @@ func (args Args) String(idx int) string {
 	return ""
 }
 
-// Int returns a typeof int argument based on its called position
-func (args Args) Int(idx int) int {
-	if arg := args.Get(idx); arg != nil {
+// Int returns a typeof int argument based on its key
+func (args Args) Int(key string) int {
+	if arg := args.Get(key); arg != nil {
 		return MustDecodeInt(arg)
 	}
 	return -1

@@ -108,8 +108,8 @@ func DecodeResult(v interface{}, from interface{}) error {
 }
 
 // Expect receives a struct and the 'client' .Do call result and set that result which is
-func Expect(v interface{}, do func(string, ...Arg) (interface{}, error)) func(string, ...Arg) interface{} {
-	return func(statement string, args ...Arg) interface{} {
+func Expect(v interface{}, do func(string, ...Args) (interface{}, error)) func(string, ...Args) interface{} {
+	return func(statement string, args ...Args) interface{} {
 		responseResult, _ := do(statement, args...)
 		// check if jsonObject is already a pointer, if yes then pass as it's
 		_, isMap := responseResult.(map[string]interface{})

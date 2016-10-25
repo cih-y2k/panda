@@ -144,7 +144,7 @@ func BenchmarkHandleDo(b *testing.B) {
 	srv := panda.NewServer(srvEngine)
 
 	srv.Handle("hello", func(req *panda.Request) {
-		name := req.Args.String(0)
+		name := req.Args.String("Name")
 		req.Result("Hello " + name)
 	})
 
@@ -174,7 +174,7 @@ func BenchmarkHandleDo(b *testing.B) {
 		go func(i int) {
 
 			name := "kataras" + strconv.Itoa(i)
-			res, err := client.Do("hello", name)
+			res, err := client.Do("hello", panda.Args{"Name": name})
 			if err != nil {
 				panic(err)
 			}

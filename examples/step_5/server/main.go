@@ -23,7 +23,7 @@ func main() {
 	server := panda.NewServer(engine)
 
 	server.Handle("getUser", func(req *panda.Request) {
-		id := req.Args.Int(0)
+		id := req.Args.Int("id") // case-sensitive
 		user, found := users[id]
 		if !found {
 			req.Error("User with ID: %d not found!", id)

@@ -229,7 +229,8 @@ func (c *Conn) acquireRequest(statement string, args Args) *Request {
 
 func (c *Conn) releaseRequest(req *Request) {
 	req.ID = ""
-	req.Args = req.Args[0:0]
+	// Dave Cheney says that making a new map is faster than deleting the previous, so:
+	req.Args = make(Args)
 	req.Statement = ""
 	req.values.Reset()
 	req.handlers = nil

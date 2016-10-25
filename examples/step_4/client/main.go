@@ -21,7 +21,7 @@ func main() {
 	}
 	// waits until connected
 
-	data, err := client.DoRaw("getUser", 1)
+	data, err := client.DoRaw("getUser", panda.Args{"id": 1})
 	if err != nil {
 		logger.Println("Error on getUser: " + err.Error())
 

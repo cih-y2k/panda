@@ -32,7 +32,7 @@ func main() {
 
 	server.Handle("getUser", middleware, func(req *panda.Request) {
 
-		id := req.Args.Int(0)
+		id := req.Args.Int("id")
 
 		user, found := users[id]
 		if !found {

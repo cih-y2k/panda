@@ -20,10 +20,10 @@ func main() {
 		return
 	}
 	// waits until connected
-
+	var args = panda.Args{"id": 0}
 	for i := 1; i <= 50; i++ {
-
-		result, err := client.Do("getUser", i)
+		args["id"] = i
+		result, err := client.Do("getUser", args)
 		if err != nil {
 			logger.Println("Error on getUser: " + err.Error())
 			continue
